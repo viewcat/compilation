@@ -96,7 +96,7 @@
     <video id="videoPlayer" autoplay muted playsinline loop></video>
 
     <script>
-	    const randStr = () => Math.random().toString(36).substring(2);
+	    const randStr = () => Math.random().toString(36).substring(2).toUpperCase();
 	    document.title = `${randStr()}${randStr()}${randStr()}`;
 
         const folderInput = document.getElementById('folderInput');
