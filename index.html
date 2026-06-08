@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: black;
+            font-family: sans-serif;
+        }
+        #setup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 25px;
+            border-radius: 2rem;
+            max-width: 400px;
+        }
+        input, select, button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 0.5rem;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+            text-align: left;
+            font-size: 14px;
+        }
+        video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="setup">
+        <label for="duration">Seconds per video:</label>
+        <input type="number" id="duration" value="10" min="1">
+
+        <label for="speedSelect">Playback Speed:</label>
+        <select id="speedSelect">
+            <option value="0.25">0.25x</option>
+            <option value="0.5">0.50x</option>
+            <option value="0.66">0.66x</option>
+            <option value="0.75">0.75x</option>
+            <option value="0.8">0.80x</option>
+            <option value="0.9">0.90x</option>
+            <option value="1.0" selected>1.00x</option>
+            <option value="1.1">1.10x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.33">1.33x</option>
+            <option value="1.5">1.50x</option>
+        </select>
+        
+        <label for="folderInput">Select Videos:</label>
+        <input type="file" id="folderInput" webkitdirectory directory multiple>
+
+
+        <!-- File Input -->
+        <label for="audioFileInput" class="file-label">Select Music:</label>
+        <input type="file" id="audioFileInput" accept="audio/*">
+        
+        <!-- Track Status -->
+        <!-- <div class="status" id="statusMessage">No file selected.</div> -->
+        
+        <!-- Audio Player controls -->
+        <div class="controls" id="playerControls">
+            <audio id="audioPlayer" controls></audio>
+        </div>
+
+        
+        <button id="startBtn">Start Playback</button>
+    </div>
+
+    <video id="videoPlayer" autoplay muted playsinline loop></video>
+
+    <script>
+	    const randStr = () => Math.random().toString(36).substring(2);
+	    document.title = `${randStr()}${randStr()}${randStr()}`;
+
+        const folderInput = document.getElementById('folderInput');
+        const startBtn = document.getElementById('startBtn');
+        const setupDiv = document.getElementById('setup');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const durationInput = document.getElementById('duration');
+	    const speedSelect = document.getElementById('speedSelect');
+
+        let masterPlaylist = [];
+        let currentIndex = 0;
+        let playTimer = null;
+        let displayDuration = 10000;
+	    let playbackSpeed = 1.0;
+
+        startBtn.addEventListener('click', () => {
+            const files = folderInput.files;
+            displayDuration = parseInt(durationInput.value) * 1000;
+	        playbackSpeed = parseFloat(speedSelect.value);
+
+            if (files.length === 0) return;
+
+            // Group files by their immediate subfolder
+            const folderGroups = {};
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                
+                if (
+                    file.name.toLowerCase().endsWith('.mp4') ||
+                    file.name.toLowerCase().endsWith('.webm')
+                ) {
+                    // file.webkitRelativePath looks like: "MainFolder/cats/video1.webm"
+                    const pathParts = file.webkitRelativePath.split('/');
+                    
+                    // Default to 'root' if file is not in a subfolder
+                    let subfolderName = 'root'; 
+                    
+                    // If it has at least one subfolder level
+                    if (pathParts.length > 2) {
+                        subfolderName = pathParts[1]; // Grabs "cats" or "dogs"
+                    }
+
+                    if (!folderGroups[subfolderName]) {
+                        folderGroups[subfolderName] = [];
+                    }
+
+                    folderGroups[subfolderName].push({
+                        name: file.name,
+                        url: URL.createObjectURL(file)
+                    });
+                }
+            }
+
+            // Sort subfolder names alphabetically (e.g., 'cats' before 'dogs')
+            const sortedSubfolders = Object.keys(folderGroups).sort();
+
+            if (sortedSubfolders.length === 0) {
+                alert('No video files found in folder.');
+                return;
+            }
+
+            // Flatten organized groups into one continuous master playlist
+            masterPlaylist = [];
+            sortedSubfolders.forEach(subfolder => {
+                // Optional: Sort files alphabetically inside their own subfolder
+                folderGroups[subfolder].sort((a, b) => a.name.localeCompare(b.name));
+                
+                // Add to master queue
+                masterPlaylist.push(...folderGroups[subfolder]);
+            });
+
+            // Hide configuration UI
+            setupDiv.style.display = 'none';
+            videoPlayer.style.display = 'block';
+
+            // Start the sequence
+            playNext();
+        });
+
+        function playNext() {
+            if (playTimer) clearTimeout(playTimer);
+
+            if (currentIndex >= masterPlaylist.length) {
+                currentIndex = 0; // Loop back to the very first subfolder's video
+            }
+
+            // Load new source. The 'loop' attribute handles local repeating.
+            videoPlayer.src = masterPlaylist[currentIndex].url;
+
+	        // Browsers reset the playback rate to 1.0 whenever a new 'src' loads.
+            // We must force our chosen speed right after setting the source.
+            videoPlayer.playbackRate = playbackSpeed;
+
+            videoPlayer.play().catch(err => console.log("Playback error:", err));
+
+            currentIndex++;
+
+            // Force switch to the next video when the user-defined timer expires
+            playTimer = setTimeout(playNext, displayDuration);
+        }
+    </script>
+
+    <script>
+        const fileInput = document.getElementById('audioFileInput');
+        const audioPlayer = document.getElementById('audioPlayer');
+        //const statusMessage = document.getElementById('statusMessage');
+        const playerControls = document.getElementById('playerControls');
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            
+            if (file) {
+                // Display the file name
+                //statusMessage.textContent = `Playing: ${file.name}`;
+                
+                // Generate a local temporary URL for the selected file
+                const fileURL = URL.createObjectURL(file);
+                
+                // Assign the URL to the audio element source
+                audioPlayer.src = fileURL;
+                
+                // FORCE JAVASCRIPT LOOPING
+                // Setting the loop property to true handles continuous looping natively
+                audioPlayer.loop = true; 
+                
+                // Show the player controls section
+                playerControls.style.display = 'block';
+                
+                // Automatically play the track once loaded
+                audioPlayer.play()
+                    .catch(error => {
+                        console.log("Playback engine waiting for manual user interaction:", error);
+                        //statusMessage.textContent = `Loaded: ${file.name}. Press play below to loop.`;
+                    });
+            }
+        });
+
+        // Optional Clean up: Revoke object URL when a new file loads to prevent memory leaks
+        audioPlayer.addEventListener('idlesourceclean', () => {
+            if (audioPlayer.src && audioPlayer.src.startsWith('blob:')) {
+                URL.revokeObjectURL(audioPlayer.src);
+            }
+        });
+    </script>
+</body>
+</html>
